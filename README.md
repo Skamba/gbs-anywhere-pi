@@ -147,7 +147,11 @@ Compared with Raspberry Pi OS Lite (64-bit), this image only:
 - adds a small hook so a network cable works without the setup Wi-Fi
   (`/etc/NetworkManager/dispatcher.d/50-gbs-anywhere-wired`,
   `/usr/lib/gbs-anywhere-pi/gbs-anywhere-net` and a drop-in for
-  `comitup.service`).
+  `comitup.service`);
+- turns IPv6 off (`ipv6.disable=1` in `cmdline.txt`). When an IPv6 address
+  changes, avahi can rename the Pi to `gbs-anywhere-2.local` until it
+  restarts, and the phone and the grinder find the app by that name. The
+  app, the grinders and the setup Wi-Fi only use IPv4.
 
 Like Raspberry Pi OS Lite, the image has no user password and SSH off until
 you set them in Imager.

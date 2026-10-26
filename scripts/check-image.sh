@@ -76,6 +76,7 @@ check "no package copy left behind" test ! -e "$r/var/tmp/gbs-anywhere.deb"
 check "cloud-init installed" pkg_installed cloud-init
 check "rpi-cloud-init-mods installed" pkg_installed rpi-cloud-init-mods
 check "cloud-init seed files on the boot partition" test -f "$boot/user-data" -a -f "$boot/network-config" -a -f "$boot/meta-data"
+check "IPv6 off on the kernel command line" grep -qw 'ipv6\.disable=1' "$boot/cmdline.txt"
 check "gbs-anywhere licence kept" test -f "$r/usr/share/doc/gbs-anywhere/copyright"
 check "package licence files kept" licence_files
 
