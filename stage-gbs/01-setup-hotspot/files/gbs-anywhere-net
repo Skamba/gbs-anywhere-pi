@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# gbs-anywhere-net no-wired | dispatch IFACE ACTION
+#
+# comitup runs the setup hotspot and starts gbs-anywhere once the Pi is on
+# Wi-Fi, but it only looks at Wi-Fi. This adds the network cable:
+#
+#   no-wired         exit 0 when no Ethernet device is connected, so
+#                    comitup may start (its ExecCondition); 1 otherwise.
+#   dispatch I A     NetworkManager dispatcher: a cable coming up turns the
+#                    hotspot off and the app on; the last cable going away
+#                    hands the Pi back to comitup, which connects to Wi-Fi
+#                    (app on) or opens the hotspot (app off).
+set -uo pipefail
+
+wired_connected() {
+    nmcli -t -f TYPE,STATE device 2>/dev/null | grep -qx 'ethernet:connected'
+}
+
+case "${1:-}" in
+    no-wired)
+        ! wired_connected
+        ;;
+    dispatch)
+        iface=${2:-} action=${3:-}
+        [ "$(nmcli -g GENERAL.TYPE device show "$iface" 2>/dev/null)" = ethernet ] || exit 0
+        case "$action" in
+            up)
+                systemctl --no-block stop comitup.service comitup-web.service
+                systemctl --no-block start gbs-anywhere.service
+                ;;
+            down)
+                wired_connected || systemctl --no-block start comitup.service
+                ;;
+        esac
+        exit 0
+        ;;
+    *)
+        echo "usage: gbs-anywhere-net no-wired | dispatch IFACE ACTION" >&2
+        exit 2
+        ;;
+esac

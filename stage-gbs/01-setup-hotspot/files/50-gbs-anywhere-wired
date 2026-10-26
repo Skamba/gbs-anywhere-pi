@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/lib/gbs-anywhere-pi/gbs-anywhere-net dispatch "$@"
