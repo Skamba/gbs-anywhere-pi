@@ -116,6 +116,24 @@ wget https://github.com/Skamba/gbs-anywhere/releases/download/v<version>/gbs-any
 sudo apt install ./gbs-anywhere_<version>-1_arm64.deb
 ```
 
+## Nightly images
+
+Nightly images let you try what's coming in the next gbs-anywhere release.
+Each one is built from the newest commit on gbs-anywhere's `main` branch
+and published without being tested on a Pi, so expect things to break now
+and then.
+
+They're on the [releases page](https://github.com/Skamba/gbs-anywhere-pi/releases)
+as pre-releases named `nightly-<date>-<commit>`, for example
+`nightly-20261026-0123abc`. Only the newest 7 are kept. To flash one, open
+its release, download its `gbs-anywhere-nightly.rpi-imager-manifest` and
+continue as in [Flash the card](#flash-the-card). Imager lists it as
+**gbs-anywhere (nightly)**. To go back, flash a normal release.
+
+If you turned on SSH, each nightly's package is attached to its release
+too, and installs on a Pi running this image with
+`sudo apt install ./gbs-anywhere_<version>-1_arm64.deb`.
+
 ## What the image changes
 
 Compared with Raspberry Pi OS Lite (64-bit), this image only:
@@ -177,6 +195,26 @@ GitHub App installed on this repository only (with
 `actions/create-github-app-token`) is better than a fine-grained personal
 access token.
 
+### Nightly images
+
+The **Nightly image** workflow runs every night at 04:17 UTC, and on a
+manual run (**Actions → Nightly image → Run workflow**). If gbs-anywhere's
+`main` has a commit that no nightly was built from yet, it checks
+gbs-anywhere out at that commit and builds the package with gbs-anywhere's
+own `packaging/build-release.sh`, unchanged, in `rust:1-bookworm`. It then
+packages the same binary again as version
+`<X.Y.Z>+git<YYYYMMDD>.<commit>`, with X.Y.Z from that commit's
+`Cargo.toml` and the commit's date. That version sorts after release X.Y.Z
+and before the next one. The image is built and checked like a release's,
+and published as a pre-release that is never marked as latest. Nightlies
+beyond the newest 7 are deleted together with their tags. gbs-anywhere's
+source is never copied into this repository, and release images still
+install the release's own package.
+
+In a public repository, GitHub disables scheduled workflows after 60 days
+without repository activity. To turn the nightly back on, open
+**Actions → Nightly image** and click **Enable workflow**.
+
 ### The app version
 
 The version for pushes and pull requests is in
@@ -210,6 +248,9 @@ gbs-anywhere is licensed under the
 Each release's notes name the gbs-anywhere version in the image, link to its
 upstream tag, and give the SHA256 of the unmodified package that was
 installed.
+A nightly image instead contains a package built in this repository with
+gbs-anywhere's own packaging script, from the gbs-anywhere commit its notes
+link to; the notes give that package's SHA256 too.
 
 This repository's own files are under the [MIT licence](LICENSE).
 
