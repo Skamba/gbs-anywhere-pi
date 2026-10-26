@@ -1,0 +1,42 @@
+{
+  "imager": {
+    "latest_version": "2.0.12",
+    "devices": [
+      {
+        "name": "Raspberry Pi 5",
+        "tags": ["pi5-64bit", "pi5-32bit"],
+        "description": "Raspberry Pi 5, 500 / 500+, and Compute Module 5",
+        "matching_type": "exclusive",
+        "capabilities": []
+      },
+      {
+        "name": "Raspberry Pi 4",
+        "tags": ["pi4-64bit", "pi4-32bit"],
+        "description": "Raspberry Pi 4 Model B, 400, and Compute Module 4",
+        "matching_type": "inclusive",
+        "capabilities": []
+      }
+    ]
+  },
+  "os_list": [
+    {
+      "name": "Raspberry Pi OS (other)",
+      "subitems": [
+        {
+          "name": "Raspberry Pi OS Lite (64-bit)",
+          "url": "https://example.invalid/lite.img.xz",
+          "init_format": "cloudinit-rpi",
+          "devices": ["pi5-64bit", "pi4-64bit", "pi3-64bit"],
+          "capabilities": ["rpi_connect"]
+        },
+        {
+          "name": "Raspberry Pi OS (Legacy, 64-bit) Lite",
+          "url": "https://example.invalid/legacy.img.xz",
+          "init_format": "systemd",
+          "devices": ["pi5-64bit", "pi4-64bit", "pi3-64bit"],
+          "capabilities": []
+        }
+      ]
+    }
+  ]
+}
