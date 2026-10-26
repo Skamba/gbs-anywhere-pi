@@ -51,7 +51,7 @@ upstream change.
   the exact upstream commit as the source (AGPL), give the package's SHA256,
   and say the package was built here with upstream's script.
 - **Pruning.** After a nightly is published, nightly releases beyond the
-  newest 7 (by creation time) are deleted with `--cleanup-tag`. Mainline
+  newest 7 (by publish time) are deleted with `--cleanup-tag`. Mainline
   releases are never touched.
 - **README.** A short "Nightly images" section for testers (where to find
   them, untested, flash the release's own manifest, re-flash a mainline

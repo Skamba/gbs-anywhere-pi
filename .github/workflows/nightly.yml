@@ -183,11 +183,13 @@ jobs:
       - name: Delete all but the newest 7 nightlies
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.image.outputs.tag }}
         run: |
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[].tagName' |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName,publishedAt |
             scripts/old-nightlies.sh 7 |
             while read -r tag; do
+              # Never the nightly this run just published.
+              [ "$tag" != "$TAG" ] || continue
               echo "Deleting $tag"
               gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
             done
