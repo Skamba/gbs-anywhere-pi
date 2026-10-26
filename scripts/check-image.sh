@@ -54,6 +54,8 @@ pkg_version() { dpkg-query --admindir="$r/var/lib/dpkg" -W -f '${Version}' "$1";
 pkg_installed() { [ "$(dpkg-query --admindir="$r/var/lib/dpkg" -W -f '${db:Status-Status}' "$1")" = installed ]; }
 no_usable_password() { [ -z "$(awk -F: '$2 !~ /^[!*]/ {print $1}' "$r/etc/shadow")" ]; }
 empty_or_absent() { [ ! -e "$1" ] || [ -z "$(ls -A "$1")" ]; }
+# cloud-init's record of a boot it has run; empty directories don't count.
+no_cloud_instance() { [ ! -e "$r/var/lib/cloud/instance" ] && empty_or_absent "$r/var/lib/cloud/instances"; }
 root_755_no_cr() { [ "$(stat -c '%a %u' "$1")" = '755 0' ] && ! grep -q $'\r' "$1"; }
 licence_files() { [ "$(find "$r/usr/share/doc" -name copyright | wc -l)" -gt 100 ]; }
 
@@ -69,7 +71,8 @@ check "dispatcher hook: root, 755, LF" root_755_no_cr "$r/etc/NetworkManager/dis
 check "hostname is gbs-anywhere" test "$(cat "$r/etc/hostname")" = gbs-anywhere
 check "ssh not enabled" test ! -e "$wants/ssh.service" -a ! -e "$wants/sshd.service"
 check "no account has a usable password" no_usable_password
-check "no first-boot state baked in" empty_or_absent "$r/var/lib/cloud"
+check "no first-boot state baked in" no_cloud_instance
+check "no package copy left behind" test ! -e "$r/var/tmp/gbs-anywhere.deb"
 check "cloud-init installed" pkg_installed cloud-init
 check "rpi-cloud-init-mods installed" pkg_installed rpi-cloud-init-mods
 check "cloud-init seed files on the boot partition" test -f "$boot/user-data" -a -f "$boot/network-config" -a -f "$boot/meta-data"

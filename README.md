@@ -4,8 +4,8 @@ A ready-to-flash SD card image for a Raspberry Pi with
 [gbs-anywhere](https://github.com/Skamba/gbs-anywhere) already installed.
 Put it on a card with Raspberry Pi Imager, start the Pi, and open the app on
 your phone. You don't need a screen, a keyboard or the command line. The
-image is Raspberry Pi OS Lite (64-bit) plus gbs-anywhere and a small setup
-Wi-Fi for when the Pi can't reach your network.
+image is based on Raspberry Pi OS Lite (64-bit) and adds gbs-anywhere and a
+small setup Wi-Fi for when the Pi can't reach your network.
 
 > Not affiliated with Mahlkönig or Hemro.
 

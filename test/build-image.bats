@@ -36,6 +36,14 @@ PI_GEN_RELEASE="gbs-anywhere 0.3.1-1 (based on Raspberry Pi OS Lite)"' ]
     ! grep -E '^(FIRST_USER_PASS|PUBKEY_SSH_FIRST_USER|WPA_COUNTRY|PUBKEY_ONLY_SSH)=' "$BATS_TEST_TMPDIR/config"
 }
 
+@test "the .deb is staged in /var/tmp, not the /tmp pi-gen covers with a tmpfs" {
+    local stage="$BATS_TEST_DIRNAME/../stage-gbs/00-gbs-anywhere"
+    grep -q '"${ROOTFS_DIR}/var/tmp/gbs-anywhere.deb"' "$stage/00-run.sh"
+    grep -qx 'apt-get install -y /var/tmp/gbs-anywhere.deb' "$stage/01-run-chroot.sh"
+    grep -qx 'rm /var/tmp/gbs-anywhere.deb' "$stage/01-run-chroot.sh"
+    ! grep -E '(^|[^r])/tmp/gbs-anywhere' "$stage/00-run.sh" "$stage/01-run-chroot.sh"
+}
+
 @test "the stage exports the only image" {
     local stage="$BATS_TEST_DIRNAME/../stage-gbs"
     [ "$(cat "$stage/EXPORT_IMAGE")" = 'IMG_SUFFIX=""' ]

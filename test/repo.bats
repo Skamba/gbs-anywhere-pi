@@ -25,3 +25,7 @@ setup() {
         return 1
     fi
 }
+
+@test "README never names the image Raspberry Pi OS" {
+    ! grep -nE '(image|it) is Raspberry Pi OS' "$BATS_TEST_DIRNAME/../README.md"
+}

@@ -16,19 +16,33 @@ wired_connected() {
     nmcli -t -f TYPE,STATE device 2>/dev/null | grep -qx 'ethernet:connected'
 }
 
+# comitup leaves its hotspot connection up when it is stopped.
+hotspot_down() {
+    local uuid type
+    nmcli -t -f UUID,TYPE connection show --active 2>/dev/null |
+        while IFS=: read -r uuid type; do
+            [ "$type" = 802-11-wireless ] || continue
+            [ "$(nmcli -g 802-11-wireless.mode connection show "$uuid" 2>/dev/null)" = ap ] || continue
+            nmcli --wait 0 connection down "$uuid" > /dev/null 2>&1
+        done
+}
+
 case "${1:-}" in
     no-wired)
         ! wired_connected
         ;;
     dispatch)
         iface=${2:-} action=${3:-}
-        [ "$(nmcli -g GENERAL.TYPE device show "$iface" 2>/dev/null)" = ethernet ] || exit 0
         case "$action" in
             up)
+                [ "$(nmcli -g GENERAL.TYPE device show "$iface" 2>/dev/null)" = ethernet ] || exit 0
                 systemctl --no-block stop comitup.service comitup-web.service
+                hotspot_down
                 systemctl --no-block start gbs-anywhere.service
                 ;;
             down)
+                # No type check: a pulled USB adapter is already gone. With
+                # comitup running, or on Wi-Fi, starting it changes nothing.
                 wired_connected || systemctl --no-block start comitup.service
                 ;;
         esac
