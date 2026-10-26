@@ -58,3 +58,27 @@ manifest() {
         --repo Skamba/gbs-anywhere-pi --date 2026-10-26 --official "$OFFICIAL"
     [ "$status" -ne 0 ]
 }
+
+@test "nightly: its own name, URL and an untested description" {
+    local img=gbs-anywhere-nightly-20261026-0123abc-arm64.img
+    head -c 1048576 /dev/urandom > "$img"
+    xz -k -0 "$img"
+    "$MAKE" --image "$BATS_TEST_TMPDIR/$img.xz" --tag nightly-20261026-0123abc \
+        --repo Skamba/gbs-anywhere-pi --date 2026-10-26 --official "$OFFICIAL" > m.json
+    run jq -e '
+        .os_list[0].name == "gbs-anywhere (nightly)" and
+        .os_list[0].url == "https://github.com/Skamba/gbs-anywhere-pi/releases/download/nightly-20261026-0123abc/gbs-anywhere-nightly-20261026-0123abc-arm64.img.xz" and
+        .os_list[0].icon == "https://github.com/Skamba/gbs-anywhere-pi/releases/download/nightly-20261026-0123abc/gbs-anywhere-icon.png" and
+        (.os_list[0].description | contains("20261026-0123abc") and contains("Untested nightly build")) and
+        .os_list[0].init_format == "cloudinit-rpi"' m.json
+    [ "$status" -eq 0 ]
+}
+
+@test "nightly: the image must match the tag" {
+    run "$MAKE" --image "$BATS_TEST_TMPDIR/$IMG.xz" --tag nightly-20261026-0123abc \
+        --repo Skamba/gbs-anywhere-pi --date 2026-10-26 --official "$OFFICIAL"
+    [ "$status" -ne 0 ]
+    run "$MAKE" --image "$BATS_TEST_TMPDIR/$IMG.xz" --tag nightly-2026-x \
+        --repo Skamba/gbs-anywhere-pi --date 2026-10-26 --official "$OFFICIAL"
+    [ "$status" -ne 0 ]
+}
