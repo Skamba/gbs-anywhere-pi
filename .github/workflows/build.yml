@@ -1,0 +1,153 @@
+# Builds the image. Pushes to main and pull requests only build and check it
+# (the image is kept as a workflow artifact for a week); a manual run or the
+# dispatch from gbs-anywhere's release job also creates a public
+# pre-release, which the maintainer tests on a Pi and then marks as latest.
+name: Image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: gbs-anywhere version (X.Y.Z); empty for the one in GBS_ANYWHERE_VERSION
+        required: false
+        type: string
+  repository_dispatch:
+    # Sent by gbs-anywhere's release job, with client_payload {"version": "X.Y.Z"}.
+    types: [gbs-anywhere-release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.event_name }}-${{ github.event.client_payload.version || inputs.version || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats shellcheck jq
+      - name: Tests
+        run: bats test/
+      - name: Shellcheck
+        run: |
+          shellcheck scripts/*.sh stage-gbs/*.sh stage-gbs/*/*.sh stage-gbs/01-setup-hotspot/files/gbs-anywhere-net
+          shellcheck -s sh stage-gbs/01-setup-hotspot/files/50-gbs-anywhere-wired
+
+  image:
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.version.outputs.build }}
+      tag: ${{ steps.version.outputs.tag }}
+      name: ${{ steps.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Choose version and build number
+        id: version
+        env:
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source scripts/lib.sh
+          version=${PAYLOAD_VERSION:-${INPUT_VERSION:-$(cat GBS_ANYWHERE_VERSION)}}
+          valid_version "$version"
+          build=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName' |
+            scripts/next-build.sh "$version")
+          {
+            echo "version=$version"
+            echo "build=$build"
+            echo "tag=v$version-$build"
+            echo "name=gbs-anywhere-$version-$build-arm64"
+          } >> "$GITHUB_OUTPUT"
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq xz-utils
+      - name: Disk space before
+        run: df -h /
+      - name: Build image
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: scripts/build-image.sh "$VERSION" "$BUILD"
+      - name: Disk space after
+        if: always()
+        run: df -h /
+      - name: Keep pi-gen's log of a failed build
+        if: failure()
+        # pi-gen works inside its container; the container's output is its log.
+        run: |
+          mkdir -p deploy
+          docker logs --timestamps pigen_work > deploy/build-docker-failed.log 2>&1 || true
+      - name: Check image
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NAME: ${{ steps.version.outputs.name }}
+        run: sudo scripts/check-image.sh "deploy/$NAME.img.xz" "$VERSION"
+      - name: Imager manifest, release notes and icon
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          NAME: ${{ steps.version.outputs.name }}
+        run: |
+          curl -fsSL --retry 3 -o build/os_list.json https://downloads.raspberrypi.com/os_list_imagingutility_v4.json
+          scripts/make-manifest.sh --image "deploy/$NAME.img.xz" --tag "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --date "$(date -u +%F)" --official build/os_list.json > deploy/gbs-anywhere.rpi-imager-manifest
+          deb_sha=$(sha256sum "build/deb/gbs-anywhere_${VERSION}-1_arm64.deb" | cut -d' ' -f1)
+          scripts/release-notes.sh --version "$VERSION" --tag "$TAG" --deb-sha256 "$deb_sha" \
+            --pi-gen-tag "$(cat PI_GEN_TAG)" --repo "$GITHUB_REPOSITORY" > deploy/release-notes.md
+          cp imager/icon.png deploy/gbs-anywhere-icon.png
+          ls -la deploy
+      - name: Keep the image for a week
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image
+          path: deploy/
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: ignore
+
+  release:
+    needs: image
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+          path: deploy
+      - name: Create pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.image.outputs.version }}
+          BUILD: ${{ needs.image.outputs.build }}
+          TAG: ${{ needs.image.outputs.tag }}
+          NAME: ${{ needs.image.outputs.name }}
+        working-directory: deploy
+        run: |
+          files=("$NAME.img.xz" gbs-anywhere.rpi-imager-manifest gbs-anywhere-icon.png "$NAME.info")
+          if [ -f "$NAME.sbom.xz" ]; then
+            files+=("$NAME.sbom.xz")
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
+            --title "gbs-anywhere $VERSION image (build $BUILD)" --notes-file release-notes.md \
+            "${files[@]}" SHA256SUMS
