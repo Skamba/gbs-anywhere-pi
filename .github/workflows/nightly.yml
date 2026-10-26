@@ -2,7 +2,8 @@
 # manual run, if main has a commit no nightly was built from yet. The
 # package is built here with gbs-anywhere's own packaging/build-release.sh,
 # then the image is published as an untested pre-release, never as latest.
-# Only the newest 7 nightlies are kept.
+# Only the newest 7 nightlies are kept. A manual run with "rebuild" builds
+# the same commit again and replaces its nightly.
 name: Nightly image
 
 on:
@@ -10,6 +11,12 @@ on:
     # After gbs-anywhere's own nightly (02:23 UTC).
     - cron: '17 4 * * *'
   workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Build even if a nightly of gbs-anywhere's main exists, and replace it (for changes in this repository)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -40,6 +47,7 @@ jobs:
         id: upstream
         env:
           GH_TOKEN: ${{ github.token }}
+          REBUILD: ${{ inputs.rebuild }}
         run: |
           read -r sha date < <(gh api repos/Skamba/gbs-anywhere/commits/main --jq '"\(.sha) \(.commit.committer.date)"')
           if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -54,11 +62,14 @@ jobs:
           # A variable, not a pipe: grep -q would stop reading early, and the
           # pipe's failure would look like "no nightly yet".
           tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')
-          if grep -Eq "^nightly-[0-9]{8}-${sha:0:7}\$" <<< "$tags"; then
+          if ! grep -Eq "^nightly-[0-9]{8}-${sha:0:7}\$" <<< "$tags"; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ "$REBUILD" = true ]; then
+            echo "A nightly of ${sha:0:7} exists already; building it again to replace it."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
             echo "A nightly of ${sha:0:7} exists already; nothing to build."
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.upstream.outputs.skip != 'true'
@@ -165,6 +176,7 @@ jobs:
       - name: Create pre-release
         env:
           GH_TOKEN: ${{ github.token }}
+          REBUILD: ${{ inputs.rebuild }}
           STAMP: ${{ needs.image.outputs.stamp }}
           VERSION: ${{ needs.image.outputs.version }}
           TAG: ${{ needs.image.outputs.tag }}
@@ -177,6 +189,11 @@ jobs:
             files+=("$NAME.sbom.xz")
           fi
           sha256sum "${files[@]}" > SHA256SUMS
+          # A rebuild replaces the nightly of the same commit, tag and all.
+          if [ "$REBUILD" = true ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Replacing $TAG"
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --target "$GITHUB_SHA" \
             --title "gbs-anywhere nightly $STAMP image" --notes-file release-notes.md \
             "${files[@]}" SHA256SUMS

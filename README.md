@@ -215,6 +215,10 @@ beyond the newest 7 are deleted together with their tags. gbs-anywhere's
 source is never copied into this repository, and release images still
 install the release's own package.
 
+A change in this repository doesn't start a nightly by itself. To get one
+now, run the workflow by hand with **rebuild** ticked: it builds
+gbs-anywhere's current `main` again and replaces that commit's nightly.
+
 In a public repository, GitHub disables scheduled workflows after 60 days
 without repository activity. To turn the nightly back on, open
 **Actions → Nightly image** and click **Enable workflow**.
