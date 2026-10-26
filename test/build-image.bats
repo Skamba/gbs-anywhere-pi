@@ -49,3 +49,36 @@ PI_GEN_RELEASE="gbs-anywhere 0.3.1-1 (based on Raspberry Pi OS Lite)"' ]
     [ "$(cat "$stage/EXPORT_IMAGE")" = 'IMG_SUFFIX=""' ]
     grep -qx comitup "$stage/01-setup-hotspot/00-packages"
 }
+
+@test "config-only --nightly writes the nightly's pi-gen config" {
+    run "$BUILD" --config-only --nightly 20261026-0123abc "$BATS_TEST_TMPDIR/config"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/config")" = 'IMG_NAME=gbs-anywhere
+IMG_FILENAME=gbs-anywhere-nightly-20261026-0123abc-arm64
+ARCHIVE_FILENAME=gbs-anywhere-nightly-20261026-0123abc-arm64
+RELEASE=trixie
+TARGET_HOSTNAME=gbs-anywhere
+DEPLOY_COMPRESSION=xz
+ENABLE_CLOUD_INIT=1
+ENABLE_SSH=0
+DISABLE_FIRST_BOOT_USER_RENAME=0
+STAGE_LIST="stage0 stage1 stage2 stage-gbs"
+PI_GEN_RELEASE="gbs-anywhere nightly 20261026-0123abc (based on Raspberry Pi OS Lite)"' ]
+}
+
+@test "--nightly refuses a bad stamp or a missing package before doing anything" {
+    run "$BUILD" --config-only --nightly 'x;y' "$BATS_TEST_TMPDIR/config"
+    [ "$status" -ne 0 ]
+    [ ! -e "$BATS_TEST_TMPDIR/config" ]
+    # A copy of the repo, so a mistaken build can't touch the real build/.
+    local repo="$BATS_TEST_TMPDIR/repo"
+    mkdir -p "$repo"
+    cp -r "$BATS_TEST_DIRNAME/../scripts" "$repo/"
+    run "$repo/scripts/build-image.sh" --nightly 20261026-0123abc "$BATS_TEST_TMPDIR/missing.deb"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *missing.deb* ]]
+    [ ! -e "$repo/build" ]
+    run "$repo/scripts/build-image.sh" --nightly '20261026-0123abc;x' "$BATS_TEST_TMPDIR/missing.deb"
+    [ "$status" -ne 0 ]
+    [ ! -e "$repo/build" ]
+}

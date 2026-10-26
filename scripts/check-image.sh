@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-image.sh IMAGE.img.xz VERSION   (as root)
+# check-image.sh IMAGE.img.xz VERSION   (as root; VERSION X.Y.Z or a nightly's X.Y.Z+gitYYYYMMDD.<sha7>)
 #
 # Mount a built image read-only and check what the design promises: the
 # app at VERSION, started only by the network setup, the setup hotspot, no
@@ -16,7 +16,7 @@ source "$(dirname "$0")/lib.sh"
 [ $# -eq 2 ] || die "usage: check-image.sh IMAGE.img.xz VERSION"
 image=$1
 version=$2
-valid_version "$version" || exit 1
+valid_package_version "$version" || exit 1
 [ "$(id -u)" -eq 0 ] || die "check-image.sh needs root (losetup, mount)"
 
 work=$(mktemp -d)
