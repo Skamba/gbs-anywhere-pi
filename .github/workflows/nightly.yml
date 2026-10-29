@@ -93,9 +93,13 @@ jobs:
         run: |
           export DEB_VERSION="$VERSION-1"
           # build-release.sh unchanged, then the same binary packaged again
-          # with the nightly's version.
+          # with the nightly's version. The script installs cargo-deb into
+          # target/tools and builds with the image's Rust instead of the one
+          # rust-toolchain.toml names; the second run needs both too.
           docker run --rm -v "$PWD/upstream:/src" -w /src -e GBS_COMMIT -e DEB_VERSION rust:1-bookworm \
-            sh -c 'sh packaging/build-release.sh && cargo deb --no-build --locked --deb-version "$DEB_VERSION"'
+            sh -c 'sh packaging/build-release.sh \
+              && export PATH="$PWD/target/tools/bin:$PATH" RUSTUP_TOOLCHAIN="$(rustup default | cut -d " " -f 1)" \
+              && cargo deb --no-build --locked --deb-version "$DEB_VERSION"'
           deb="upstream/target/debian/gbs-anywhere_${DEB_VERSION}_arm64.deb"
           got=$(dpkg-deb -f "$deb" Version)
           if [ "$got" != "$DEB_VERSION" ]; then
