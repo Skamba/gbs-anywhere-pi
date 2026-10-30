@@ -1,32 +1,70 @@
 # Builds the image. Pushes to main and pull requests only build and check it
-# (the image is kept as a workflow artifact for a week); a manual run or the
-# dispatch from gbs-anywhere's release job also creates a public
-# pre-release, which the maintainer tests on a Pi and then marks as latest.
+# (the image is kept as a workflow artifact for a week); a manual run also
+# creates a public pre-release, which the maintainer tests on a Pi and then
+# marks as latest. Each day it looks for a new gbs-anywhere release and does
+# the same for it, unless this repository has an image of it already.
 name: Image
 
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # After gbs-anywhere's nightly image (02:23 UTC) and this repository's
+    # (04:17 UTC).
+    - cron: '41 5 * * *'
   workflow_dispatch:
     inputs:
       version:
         description: gbs-anywhere version (X.Y.Z); empty for the one in GBS_ANYWHERE_VERSION
         required: false
         type: string
-  repository_dispatch:
-    # Sent by gbs-anywhere's release job, with client_payload {"version": "X.Y.Z"}.
-    types: [gbs-anywhere-release]
 
 permissions:
   contents: read
 
 concurrency:
-  group: image-${{ github.event_name }}-${{ github.event.client_payload.version || inputs.version || github.ref }}
+  group: image-${{ github.event_name }}-${{ inputs.version || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # On the daily run: gbs-anywhere's latest release, and whether this
+  # repository has an image of it yet. Every other run builds.
+  release-check:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'schedule'
+        with:
+          persist-credentials: false
+      - name: Find gbs-anywhere's latest release
+        id: check
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source scripts/lib.sh
+          # The latest release is never a pre-release, so never a tag with "-".
+          tag=$(gh api repos/Skamba/gbs-anywhere/releases/latest --jq .tag_name)
+          version=${tag#v}
+          valid_version "$version"
+          build=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName' |
+            scripts/next-build.sh "$version")
+          if [ "$build" = 1 ]; then
+            echo "gbs-anywhere $version has no image yet; building it."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "gbs-anywhere $version has an image already; nothing to build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: release-check
+    if: needs.release-check.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,7 +82,7 @@ jobs:
           shellcheck -s sh stage-gbs/01-setup-hotspot/files/50-gbs-anywhere-wired
 
   image:
-    needs: test
+    needs: [release-check, test]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     outputs:
@@ -59,12 +97,12 @@ jobs:
       - name: Choose version and build number
         id: version
         env:
-          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          RELEASE_VERSION: ${{ needs.release-check.outputs.version }}
           INPUT_VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
           source scripts/lib.sh
-          version=${PAYLOAD_VERSION:-${INPUT_VERSION:-$(cat GBS_ANYWHERE_VERSION)}}
+          version=${RELEASE_VERSION:-${INPUT_VERSION:-$(cat GBS_ANYWHERE_VERSION)}}
           valid_version "$version"
           build=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName' |
             scripts/next-build.sh "$version")
@@ -125,7 +163,7 @@ jobs:
 
   release:
     needs: image
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     permissions:
       contents: write

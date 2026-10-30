@@ -160,12 +160,17 @@ you set them in Imager.
 
 ### How releases work
 
-A new gbs-anywhere release sends a
-`repository_dispatch` to this repo. The **Image** workflow then builds the
+Each day at 05:41 UTC the **Image** workflow looks up gbs-anywhere's
+latest release. If this repository has no image of it yet, it builds the
 image with [pi-gen](https://github.com/RPi-Distro/pi-gen), checks it, and
 creates a pre-release `v<version>-<build>` (for example `v0.3.1-1`). A
 manual run (**Actions → Image → Run workflow**, optionally with a version)
-does the same. Test the pre-release on a real Pi by opening its own manifest
+does the same at once. gbs-anywhere itself knows nothing of this
+repository.
+
+As with the nightly, GitHub disables the daily run after 60 days without
+repository activity; turn it back on under **Actions → Image → Enable
+workflow**. Test the pre-release on a real Pi by opening its own manifest
 in Imager:
 
 ```
@@ -177,27 +182,6 @@ latest release. Only then does the link in [Flash the card](#flash-the-card)
 serve it. A rebuild of the same version gets the next build number. Pushes
 to `main` and pull requests build and check the image too, and keep it as a
 workflow artifact for a week, but publish nothing.
-
-### The dispatch from gbs-anywhere
-
-gbs-anywhere's release job sends event type
-`gbs-anywhere-release` with the version, without the `v`, as
-`client_payload.version`:
-
-```yaml
-- name: Ask gbs-anywhere-pi to build an image
-  env:
-    GH_TOKEN: ${{ steps.pi-token.outputs.token }}
-  run: >
-    gh api repos/Skamba/gbs-anywhere-pi/dispatches
-    -f event_type=gbs-anywhere-release
-    -f "client_payload[version]=${GITHUB_REF_NAME#v}"
-```
-
-The token needs **Contents: write** on this repository and nothing else. A
-GitHub App installed on this repository only (with
-`actions/create-github-app-token`) is better than a fine-grained personal
-access token.
 
 ### Nightly images
 
@@ -226,8 +210,8 @@ without repository activity. To turn the nightly back on, open
 ### The app version
 
 The version for pushes and pull requests is in
-`GBS_ANYWHERE_VERSION`. A dispatch or a manual run with a version overrides
-it; bump the file in a pull request when convenient.
+`GBS_ANYWHERE_VERSION`. The daily release check and a manual run with a
+version override it; bump the file in a pull request when convenient.
 
 ### Moving to a new pi-gen tag
 
