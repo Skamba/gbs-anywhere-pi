@@ -8,8 +8,8 @@ die() {
 }
 
 # valid_version VERSION: succeed for a plain X.Y.Z release version. Versions
-# reach URLs and file names, and may come from a dispatch payload, so
-# nothing else gets through.
+# reach URLs and file names, and may come from a workflow input or
+# gbs-anywhere's release tag, so nothing else gets through.
 valid_version() {
     if [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         return 0
